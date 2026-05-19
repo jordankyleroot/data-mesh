@@ -1,0 +1,58 @@
+{
+  "type": "record",
+  "name": "OrderPlaced",
+  "namespace": "com.datamesh.orders",
+  "doc": "Emitted when a customer places an order. Subject: orders.order-placed-value",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "UUID v4 primary key for this order"
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "doc": "UUID of the customer who placed the order"
+    },
+    {
+      "name": "items",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "OrderItem",
+          "fields": [
+            { "name": "sku",       "type": "string" },
+            { "name": "qty",       "type": "int" },
+            { "name": "unitPrice", "type": "double" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "total",
+      "type": "double",
+      "doc": "Order total in USD"
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "default": "USD"
+    },
+    {
+      "name": "channel",
+      "type": { "type": "enum", "name": "Channel", "symbols": ["WEB", "MOBILE", "POS", "API"] },
+      "default": "WEB"
+    },
+    {
+      "name": "status",
+      "type": { "type": "enum", "name": "OrderStatus", "symbols": ["PLACED", "CONFIRMED", "CANCELLED"] },
+      "default": "PLACED"
+    },
+    {
+      "name": "createdAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "Unix timestamp in milliseconds (UTC)"
+    }
+  ]
+}

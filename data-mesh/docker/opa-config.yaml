@@ -1,0 +1,16 @@
+services:
+  - name: localhost
+    url: http://localhost:8181
+
+bundles:
+  authz:
+    service: localhost
+    resource: /bundles/authz.tar.gz
+
+decision_logs:
+  console: true
+
+plugins:
+  envoy_ext_authz_grpc:
+    addr: :9191
+    query: data.datamesh.authz.allow

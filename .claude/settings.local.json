@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(rm -f C:/Users/kyle/.git/index.lock)",
+      "Bash(tasklist /FI \"IMAGENAME eq git.exe\")"
+    ]
+  }
+}

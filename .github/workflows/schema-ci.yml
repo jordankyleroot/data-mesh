@@ -1,0 +1,186 @@
+name: Schema CI — Lint, Compatibility & Contract Tests
+
+on:
+  pull_request:
+    paths:
+      - "samples/schemas/**"
+      - "platform/policy/**"
+  push:
+    branches: [main]
+    paths:
+      - "samples/schemas/**"
+
+env:
+  SCHEMA_REGISTRY_URL: http://localhost:8081
+
+jobs:
+  # ── 1. Lint Avro schemas ──────────────────────────────────────────────────
+  lint-schemas:
+    name: Lint Avro Schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install avro tools
+        run: pip install avro-python3 jsonschema
+
+      - name: Parse & validate all .avsc files
+        run: |
+          set -e
+          for f in samples/schemas/*.avsc; do
+            echo "Validating $f..."
+            python -c "
+          import json, sys
+          import avro.schema
+          with open('$f') as fh:
+              data = json.load(fh)
+          avro.schema.parse(json.dumps(data))
+          print('  OK:', '$f')
+          "
+          done
+
+  # ── 2. Compatibility check against staging registry ───────────────────────
+  compatibility-check:
+    name: Schema Compatibility Check
+    runs-on: ubuntu-latest
+    needs: lint-schemas
+    services:
+      zookeeper:
+        image: confluentinc/cp-zookeeper:7.6.0
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+      kafka:
+        image: confluentinc/cp-kafka:7.6.0
+        env:
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        options: >-
+          --health-cmd "kafka-topics --bootstrap-server localhost:9092 --list"
+          --health-interval 10s --health-retries 5
+      schema-registry:
+        image: confluentinc/cp-schema-registry:7.6.0
+        env:
+          SCHEMA_REGISTRY_HOST_NAME: localhost
+          SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: localhost:9092
+          SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+          SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 8081:8081
+        options: >-
+          --health-cmd "curl -f http://localhost:8081/subjects"
+          --health-interval 10s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SDK
+        run: pip install requests avro-python3
+
+      - name: Check compatibility for changed schemas
+        run: |
+          python ci/check_schema_compatibility.py \
+            --registry-url "$SCHEMA_REGISTRY_URL" \
+            --schemas-dir samples/schemas
+
+  # ── 3. OPA policy tests ───────────────────────────────────────────────────
+  policy-tests:
+    name: OPA Policy Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OPA
+        run: |
+          curl -L -o /usr/local/bin/opa \
+            https://openpolicyagent.org/downloads/v0.64.1/opa_linux_amd64_static
+          chmod +x /usr/local/bin/opa
+
+      - name: Run OPA tests
+        run: |
+          opa test platform/policy/rules/ platform/policy/tests/ -v
+
+  # ── 4. Consumer contract tests ────────────────────────────────────────────
+  contract-tests:
+    name: Consumer Contract Tests
+    runs-on: ubuntu-latest
+    needs: compatibility-check
+    services:
+      kafka:
+        image: confluentinc/cp-kafka:7.6.0
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+          CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+        ports:
+          - 9092:9092
+      schema-registry:
+        image: confluentinc/cp-schema-registry:7.6.0
+        env:
+          SCHEMA_REGISTRY_HOST_NAME: localhost
+          SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: localhost:9092
+          SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+          SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 8081:8081
+        options: >-
+          --health-cmd "curl -f http://localhost:8081/subjects"
+          --health-interval 10s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install confluent-kafka[avro] pytest pytest-timeout requests
+
+      - name: Run contract tests
+        env:
+          KAFKA_BROKERS: localhost:9092
+          SCHEMA_REGISTRY_URL: http://localhost:8081
+        run: |
+          pytest samples/acceptance-tests/ -v --timeout=60 -x \
+            -k "contract" \
+            --tb=short
+
+  # ── Gate: block merge on any failure ─────────────────────────────────────
+  gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    needs: [lint-schemas, compatibility-check, policy-tests, contract-tests]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.lint-schemas.result }}" != "success" || \
+                "${{ needs.compatibility-check.result }}" != "success" || \
+                "${{ needs.policy-tests.result }}" != "success" || \
+                "${{ needs.contract-tests.result }}" != "success" ]]; then
+            echo "One or more CI checks failed. Blocking merge."
+            exit 1
+          fi
+          echo "All checks passed."

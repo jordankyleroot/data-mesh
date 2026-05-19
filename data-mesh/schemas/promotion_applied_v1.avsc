@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "PromotionApplied",
+  "namespace": "com.datamesh.promotions",
+  "doc": "Emitted when a promotion is applied to an order. Subject: promotions.promotion-applied-value",
+  "fields": [
+    { "name": "promotionId",  "type": "string" },
+    { "name": "orderId",      "type": "string" },
+    { "name": "userId",       "type": "string" },
+    { "name": "code",         "type": "string" },
+    {
+      "name": "discountType",
+      "type": { "type": "enum", "name": "DiscountType", "symbols": ["PERCENT", "FIXED", "BOGO", "FREE_SHIPPING"] }
+    },
+    { "name": "discountValue", "type": "double" },
+    { "name": "appliedAt",     "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

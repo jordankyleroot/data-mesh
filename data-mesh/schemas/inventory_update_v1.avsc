@@ -1,0 +1,43 @@
+{
+  "type": "record",
+  "name": "InventoryUpdate",
+  "namespace": "com.datamesh.inventory",
+  "doc": "Emitted by the inventory domain when stock levels change. Subject: inventory.stock-update-value",
+  "fields": [
+    {
+      "name": "sku",
+      "type": "string",
+      "doc": "Stock keeping unit identifier"
+    },
+    {
+      "name": "delta",
+      "type": "int",
+      "doc": "Signed quantity change (negative = consumed/reserved)"
+    },
+    {
+      "name": "quantityOnHand",
+      "type": "int",
+      "doc": "Absolute stock count after applying delta"
+    },
+    {
+      "name": "warehouseId",
+      "type": "string",
+      "default": "default"
+    },
+    {
+      "name": "source",
+      "type": { "type": "enum", "name": "UpdateSource", "symbols": ["ORDER", "RETURN", "RESTOCK", "ADJUSTMENT", "SHRINKAGE"] },
+      "doc": "What caused this inventory change"
+    },
+    {
+      "name": "referenceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional order/return/po ID that triggered the change"
+    },
+    {
+      "name": "updatedAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" }
+    }
+  ]
+}

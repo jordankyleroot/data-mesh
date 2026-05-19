@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: kafka
+    static_configs:
+      - targets: ["kafka:7071"]  # JMX exporter sidecar (in prod, MSK Open Monitoring)
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  - job_name: schema-registry
+    static_configs:
+      - targets: ["schema-registry:8081"]
+    metrics_path: /metrics
+
+  - job_name: portal-api
+    static_configs:
+      - targets: ["portal-api:3000"]
+    metrics_path: /metrics
+
+  - job_name: opa
+    static_configs:
+      - targets: ["opa:8181"]
+    metrics_path: /metrics
+
+  - job_name: clickhouse
+    static_configs:
+      - targets: ["clickhouse:9363"]  # clickhouse-exporter sidecar
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

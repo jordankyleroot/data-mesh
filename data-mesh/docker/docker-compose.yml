@@ -1,0 +1,209 @@
+version: "3.9"
+
+# Local development stack for the Data Mesh platform.
+# Provides: Kafka (KRaft mode), Schema Registry, ClickHouse, PostgreSQL, OPA, Portal API
+
+services:
+
+  # ── Kafka (KRaft, no ZooKeeper) ──────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    hostname: kafka
+    container_name: datamesh-kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"  # controller
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: kafka-topics --bootstrap-server kafka:9092 --list
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # ── Schema Registry ───────────────────────────────────────────────────────
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.0
+    hostname: schema-registry
+    container_name: datamesh-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: curl -f http://localhost:8081/subjects || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Kafka topic provisioner (one-shot) ────────────────────────────────────
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: datamesh-kafka-setup
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+        --topic orders.order-placed.critical --partitions 6 --replication-factor 1 \
+        --config retention.ms=604800000 --config min.insync.replicas=1 &&
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+        --topic inventory.stock-update.standard --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+        --topic promotions.promotion-applied.standard --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+        --topic _datamesh.audit.bulk --partitions 1 --replication-factor 1 \
+        --config retention.ms=2592000000
+      echo 'Topics provisioned.'
+      "
+    restart: "no"
+
+  # ── ClickHouse ────────────────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: datamesh-clickhouse
+    ports:
+      - "8123:8123"  # HTTP
+      - "9000:9000"  # Native
+    environment:
+      CLICKHOUSE_DB: datamesh
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── PostgreSQL (portal metadata store) ───────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: datamesh-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: datamesh
+      POSTGRES_USER: datamesh
+      POSTGRES_PASSWORD: datamesh
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../platform/portal/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: pg_isready -U datamesh
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── OPA (policy engine) ──────────────────────────────────────────────────
+  opa:
+    image: openpolicyagent/opa:0.64.1
+    container_name: datamesh-opa
+    ports:
+      - "8181:8181"
+    command:
+      - run
+      - --server
+      - --log-level=info
+      - --config-file=/config/opa-config.yaml
+      - /policies
+    volumes:
+      - ../../platform/policy/rules:/policies:ro
+      - ./opa-config.yaml:/config/opa-config.yaml:ro
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Portal API ────────────────────────────────────────────────────────────
+  portal-api:
+    build:
+      context: ../../platform/portal
+      dockerfile: Dockerfile
+    container_name: datamesh-portal-api
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://datamesh:datamesh@postgres:5432/datamesh
+      KAFKA_BROKERS: kafka:9092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      OPA_URL: http://opa:8181
+      JWT_SECRET: dev-secret-change-in-prod
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Prometheus ────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: datamesh-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+
+  # ── Grafana ───────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: datamesh-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../../platform/observability/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  kafka_data:
+  clickhouse_data:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

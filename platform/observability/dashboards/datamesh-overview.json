@@ -1,0 +1,164 @@
+{
+  "title": "Data Mesh — Platform Overview",
+  "uid": "datamesh-overview",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Event Throughput (msg/s)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "sum(rate(kafka_server_brokertopicmetrics_messagesinpersec_total[5m]))",
+        "legendFormat": "msg/s"
+      }],
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [
+          { "value": null,  "color": "green" },
+          { "value": 50000, "color": "yellow" },
+          { "value": 100000, "color": "red" }
+        ]
+      }}}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Max Consumer Lag",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "max(kafka_consumer_group_lag)",
+        "legendFormat": "max lag"
+      }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [
+          { "value": null,   "color": "green" },
+          { "value": 1000,   "color": "yellow" },
+          { "value": 10000,  "color": "red" }
+        ]
+      }}}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Schema Registry Subjects",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "schema_registry_registered_count",
+        "legendFormat": "schemas"
+      }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Schema Compatibility Failures (24h)",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "increase(schema_registry_avro_schema_registry_incompatible_schemas_total[24h])",
+        "legendFormat": "failures"
+      }],
+      "fieldConfig": { "defaults": { "thresholds": {
+        "steps": [
+          { "value": null, "color": "green" },
+          { "value": 1,    "color": "red" }
+        ]
+      }}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "P99 E2E Delivery Latency",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum by(le) (rate(datamesh_event_delivery_duration_seconds_bucket[5m])))",
+        "legendFormat": "p99 latency"
+      }],
+      "fieldConfig": { "defaults": {
+        "unit": "s",
+        "thresholds": {
+          "steps": [
+            { "value": null, "color": "green" },
+            { "value": 5,    "color": "yellow" },
+            { "value": 30,   "color": "red" }
+          ]
+        }
+      }}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Message Throughput per Topic",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum by(topic) (rate(kafka_server_brokertopicmetrics_messagesinpersec_total[2m]))",
+        "legendFormat": "{{topic}}"
+      }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Consumer Group Lag by Group",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum by(group) (kafka_consumer_group_lag)",
+        "legendFormat": "{{group}}"
+      }]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Portal API Request Rate & Errors",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job='portal-api'}[2m]))",
+          "legendFormat": "req/s"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{job='portal-api',status=~'5..'}[2m]))",
+          "legendFormat": "5xx errors"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "OPA Decision Rate",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(opa_decision_logs_total[2m]))",
+          "legendFormat": "decisions/s"
+        },
+        {
+          "expr": "sum(rate(opa_decision_logs_total{allowed='false'}[2m]))",
+          "legendFormat": "denials/s"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "SLO Burn: 99.95% Delivery in 30s",
+      "gridPos": { "x": 0, "y": 18, "w": 24, "h": 6 },
+      "targets": [{
+        "expr": "100 * (1 - sum(rate(datamesh_event_delivery_failed_total[1h])) / sum(rate(datamesh_event_delivery_total[1h])))",
+        "legendFormat": "Success Rate %",
+        "instant": true
+      }],
+      "fieldConfig": { "defaults": {
+        "unit": "percent",
+        "thresholds": {
+          "steps": [
+            { "value": null,   "color": "red" },
+            { "value": 99.0,   "color": "yellow" },
+            { "value": 99.95,  "color": "green" }
+          ]
+        }
+      }}
+    }
+  ]
+}
