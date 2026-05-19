@@ -60,10 +60,21 @@ class DataMeshProducer:
     # ------------------------------------------------------------------
     def _get_serializer(self, schema_str: str, subject: str) -> AvroSerializer:
         if subject not in self._serializers:
+            # Use a fixed-subject strategy so the serializer looks up exactly
+            # "{domain}.{event_type}-value" regardless of the topic name.
+            _subj = subject
+
+            def _fixed_subject(ctx, schema_str):  # noqa: ARG001
+                return _subj
+
             self._serializers[subject] = AvroSerializer(
                 self._sr_client,
                 schema_str,
-                conf={"auto.register.schemas": False, "use.latest.version": True},
+                conf={
+                    "auto.register.schemas": False,
+                    "use.latest.version": True,
+                    "subject.name.strategy": _fixed_subject,
+                },
             )
         return self._serializers[subject]
 

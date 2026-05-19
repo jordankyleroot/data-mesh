@@ -19,7 +19,10 @@ pii_field_names := {
 # ─────────────────────────────────────────────────────────────────────────────
 platform_admins := {"platform-admin"}
 
-is_platform_admin if input.requester.roles[_] == platform_admins[_]
+is_platform_admin if {
+    some role in input.requester.roles
+    role in platform_admins
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schema registration policy
@@ -136,7 +139,7 @@ max_retention_ms := 2592000000  # 30 days default
 
 retention_violation[msg] {
     input.retention_ms > max_retention_ms
-    not input.requester.roles[_] == "data-steward"
+    not "data-steward" in input.requester.roles
     msg := sprintf("retention_ms %v exceeds maximum %v. Request an exception from a data steward.", [
         input.retention_ms, max_retention_ms
     ])

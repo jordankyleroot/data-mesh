@@ -11,6 +11,7 @@ Usage:
   python inventory_consumer.py
 """
 
+import datetime
 import logging
 import os
 import time
@@ -63,12 +64,20 @@ def ensure_schema(client) -> None:
 
 def handle_order(payload: dict[str, Any], headers: dict, ch_client) -> None:
     order_id = payload["orderId"]
-    created_at_ms = payload["createdAt"]
-    ts = created_at_ms / 1000.0
+    created_at_raw = payload["createdAt"]
+    # Avro timestamp-millis deserializes to datetime in confluent_kafka >= 2.x
+    # ClickHouse DateTime64 insert requires a datetime object (not a float)
+    if isinstance(created_at_raw, datetime.datetime):
+        event_dt = created_at_raw.replace(tzinfo=datetime.timezone.utc) \
+            if created_at_raw.tzinfo is None else created_at_raw
+    else:
+        event_dt = datetime.datetime.fromtimestamp(
+            created_at_raw / 1000.0, tz=datetime.timezone.utc
+        )
 
     rows = []
     for item in payload.get("items", []):
-        rows.append([item["sku"], item["qty"], order_id, ts])
+        rows.append([item["sku"], item["qty"], order_id, event_dt])
 
     if rows:
         ch_client.insert(

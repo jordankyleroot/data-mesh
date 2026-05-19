@@ -28,7 +28,7 @@ def main():
         subject = f"{domain}.{event}-value"
 
         schema_id = client.register(subject, schema, compatibility="FULL_TRANSITIVE")
-        print(f"Registered {subject} → schema_id={schema_id}")
+        print(f"Registered {subject} -> schema_id={schema_id}")
 
 
 if __name__ == "__main__":

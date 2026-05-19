@@ -1,82 +1,88 @@
 version: "3.9"
 
-# Local development stack for the Data Mesh platform.
-# Provides: Kafka (KRaft mode), Schema Registry, ClickHouse, PostgreSQL, OPA, Portal API
+# Local development stack — Data Mesh platform
+# Uses Redpanda (Kafka-compatible, no JVM, reliable on Windows Docker Desktop)
+# Redpanda provides both the Kafka broker AND Schema Registry in one container.
 
 services:
 
-  # ── Kafka (KRaft, no ZooKeeper) ──────────────────────────────────────────
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    hostname: kafka
+  # ── Redpanda (Kafka + Schema Registry in one, no JVM) ────────────────────
+  # Two listeners:
+  #   INTERNAL://redpanda:29092  — used by other containers (portal-api etc.)
+  #   EXTERNAL://localhost:9092  — used by host-side scripts (producer, consumer)
+  # Schema Registry: http://localhost:8081 (host) / http://redpanda:8081 (containers)
+  redpanda:
+    image: redpandadata/redpanda:v23.3.21
     container_name: datamesh-kafka
+    hostname: redpanda
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --node-id 0
+      - --kafka-addr INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      - --advertise-kafka-addr INTERNAL://redpanda:29092,EXTERNAL://localhost:9092
+      - --schema-registry-addr http://0.0.0.0:8081
+      - --pandaproxy-addr http://0.0.0.0:8082
+      - --rpc-addr 0.0.0.0:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --default-log-level=warn
     ports:
-      - "9092:9092"
-      - "9093:9093"  # controller
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+      - "9092:9092"    # Kafka — host scripts
+      - "29092:29092"  # Kafka — internal (containers)
+      - "8081:8081"    # Schema Registry
+      - "8082:8082"    # HTTP Proxy
     volumes:
-      - kafka_data:/var/lib/kafka/data
+      - kafka_data:/var/lib/redpanda/data
     healthcheck:
-      test: kafka-topics --bootstrap-server kafka:9092 --list
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 10s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 20s
 
-  # ── Schema Registry ───────────────────────────────────────────────────────
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.6.0
-    hostname: schema-registry
-    container_name: datamesh-schema-registry
+  # ── Redpanda Console (optional UI for browsing topics/messages) ───────────
+  redpanda-console:
+    image: redpandadata/console:v2.4.5
+    container_name: datamesh-redpanda-console
     depends_on:
-      kafka:
+      redpanda:
         condition: service_healthy
     ports:
-      - "8081:8081"
+      - "8080:8080"
     environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
-      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
-    healthcheck:
-      test: curl -f http://localhost:8081/subjects || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      KAFKA_BROKERS: redpanda:29092
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
+      SCHEMAREGISTRY_ENABLED: "true"
+      SCHEMAREGISTRY_URLS: http://redpanda:8081
+    restart: on-failure
 
-  # ── Kafka topic provisioner (one-shot) ────────────────────────────────────
+  # ── Topic provisioner ─────────────────────────────────────────────────────
   kafka-setup:
-    image: confluentinc/cp-kafka:7.6.0
+    image: redpandadata/redpanda:v23.3.21
     container_name: datamesh-kafka-setup
     depends_on:
-      kafka:
+      redpanda:
         condition: service_healthy
     entrypoint: ["/bin/bash", "-c"]
-    command: |
-      "
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
-        --topic orders.order-placed.critical --partitions 6 --replication-factor 1 \
-        --config retention.ms=604800000 --config min.insync.replicas=1 &&
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
-        --topic inventory.stock-update.standard --partitions 3 --replication-factor 1 &&
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
-        --topic promotions.promotion-applied.standard --partitions 3 --replication-factor 1 &&
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
-        --topic _datamesh.audit.bulk --partitions 1 --replication-factor 1 \
-        --config retention.ms=2592000000
-      echo 'Topics provisioned.'
-      "
+    command:
+      - |
+        rpk topic create orders.order-placed.critical \
+          --brokers redpanda:29092 --partitions 6 --replicas 1 \
+          --topic-config retention.ms=604800000 &&
+        rpk topic create inventory.stock-update.standard \
+          --brokers redpanda:29092 --partitions 3 --replicas 1 &&
+        rpk topic create promotions.promotion-applied.standard \
+          --brokers redpanda:29092 --partitions 3 --replicas 1 &&
+        rpk topic create _datamesh.audit.bulk \
+          --brokers redpanda:29092 --partitions 1 --replicas 1 \
+          --topic-config retention.ms=2592000000 &&
+        echo "All topics provisioned."
     restart: "no"
 
   # ── ClickHouse ────────────────────────────────────────────────────────────
@@ -84,8 +90,8 @@ services:
     image: clickhouse/clickhouse-server:24.3
     container_name: datamesh-clickhouse
     ports:
-      - "8123:8123"  # HTTP
-      - "9000:9000"  # Native
+      - "8123:8123"
+      - "9000:9000"
     environment:
       CLICKHOUSE_DB: datamesh
       CLICKHOUSE_USER: default
@@ -98,12 +104,13 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
-  # ── PostgreSQL (portal metadata store) ───────────────────────────────────
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: datamesh-postgres
@@ -117,12 +124,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ../../platform/portal/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: pg_isready -U datamesh
+      test: ["CMD", "pg_isready", "-U", "datamesh"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  # ── OPA (policy engine) ──────────────────────────────────────────────────
+  # ── OPA ───────────────────────────────────────────────────────────────────
   opa:
     image: openpolicyagent/opa:0.64.1
     container_name: datamesh-opa
@@ -132,16 +139,11 @@ services:
       - run
       - --server
       - --log-level=info
-      - --config-file=/config/opa-config.yaml
       - /policies
     volumes:
       - ../../platform/policy/rules:/policies:ro
-      - ./opa-config.yaml:/config/opa-config.yaml:ro
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1
-      interval: 5s
-      timeout: 3s
-      retries: 10
+    # OPA 0.64.1 is a distroless binary — no wget/curl available for healthcheck.
+    # portal-api has its own retry logic for OPA unavailability.
 
   # ── Portal API ────────────────────────────────────────────────────────────
   portal-api:
@@ -153,20 +155,20 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://datamesh:datamesh@postgres:5432/datamesh
-      KAFKA_BROKERS: kafka:9092
-      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KAFKA_BROKERS: redpanda:29092       # internal listener
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
       OPA_URL: http://opa:8181
       JWT_SECRET: dev-secret-change-in-prod
       LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
-      schema-registry:
+      redpanda:
         condition: service_healthy
       opa:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 10s
       timeout: 5s
       retries: 10
