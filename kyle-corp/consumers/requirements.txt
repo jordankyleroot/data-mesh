@@ -1,0 +1,3 @@
+confluent-kafka[avro]
+clickhouse-connect
+requests

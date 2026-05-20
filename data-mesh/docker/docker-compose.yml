@@ -203,6 +203,69 @@ services:
     depends_on:
       - prometheus
 
+  # ── Kyle Corp: topic provisioner ─────────────────────────────────────────
+  kyle-corp-setup:
+    image: redpandadata/redpanda:v23.3.21
+    container_name: kylecorp-setup
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create crude.barrel-received.critical --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        rpk topic create crude.batch-processed.critical --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        rpk topic create pipeline.flow-updated.standard --brokers redpanda:29092 --partitions 3 --replicas 1 &&
+        rpk topic create pipeline.leak-alert.critical   --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        rpk topic create trading.deal-executed.critical --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        rpk topic create trading.price-tick.bulk        --brokers redpanda:29092 --partitions 1 --replicas 1 &&
+        rpk topic create logistics.shipment-dispatched.standard --brokers redpanda:29092 --partitions 3 --replicas 1 &&
+        rpk topic create logistics.delivery-confirmed.critical  --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        rpk topic create safety.incident-reported.critical      --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        rpk topic create finance.invoice-raised.standard        --brokers redpanda:29092 --partitions 3 --replicas 1 &&
+        rpk topic create customer.order-placed.critical         --brokers redpanda:29092 --partitions 6 --replicas 1 &&
+        echo "All Kyle Corp topics provisioned."
+    restart: "no"
+
+  # ── Kyle Corp: real-time API (port 4000) ──────────────────────────────────
+  kyle-corp-api:
+    build:
+      context: ../../kyle-corp/api
+      dockerfile: Dockerfile
+    container_name: kylecorp-api
+    ports:
+      - "4000:4000"
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: datamesh
+      PORT: "4000"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Kyle Corp: customer & operations portal (port 5000) ───────────────────
+  kyle-corp-frontend:
+    build:
+      context: ../../kyle-corp/frontend
+      dockerfile: Dockerfile
+    container_name: kylecorp-frontend
+    ports:
+      - "5000:80"
+    depends_on:
+      kyle-corp-api:
+        condition: service_healthy
+    restart: on-failure
+
 volumes:
   kafka_data:
   clickhouse_data:

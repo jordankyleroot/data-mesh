@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "TradingDealExecuted",
+  "namespace": "com.kylecorp.trading",
+  "doc": "A buy or sell deal confirmed on the market",
+  "fields": [
+    {"name": "dealId",       "type": "string"},
+    {"name": "traderId",     "type": "string"},
+    {"name": "product",      "type": {"type": "enum", "name": "TradingProduct", "symbols": ["BRENT_CRUDE", "WTI_CRUDE", "DIESEL", "PETROL", "LPG", "KEROSENE"]}},
+    {"name": "side",         "type": {"type": "enum", "name": "TradeSide", "symbols": ["BUY", "SELL"]}},
+    {"name": "quantity",     "type": "double", "doc": "Barrels"},
+    {"name": "priceUsd",     "type": "double"},
+    {"name": "counterparty", "type": "string"},
+    {"name": "executedAt",   "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

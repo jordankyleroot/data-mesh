@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "CrudeBatchProcessed",
+  "namespace": "com.kylecorp.crude",
+  "doc": "Fired when a refinery batch run completes",
+  "fields": [
+    {"name": "batchId",          "type": "string"},
+    {"name": "refineryId",       "type": "string"},
+    {"name": "inputBarrels",     "type": "double"},
+    {"name": "dieselYield",      "type": "double"},
+    {"name": "petrolYield",      "type": "double"},
+    {"name": "lpgYield",         "type": "double"},
+    {"name": "keroseneYield",    "type": "double"},
+    {"name": "processedAt",      "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

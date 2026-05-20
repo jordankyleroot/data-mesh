@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "LogisticsDeliveryConfirmed",
+  "namespace": "com.kylecorp.logistics",
+  "doc": "Product successfully delivered to customer",
+  "fields": [
+    {"name": "deliveryId",   "type": "string"},
+    {"name": "shipmentId",   "type": "string"},
+    {"name": "orderId",      "type": "string"},
+    {"name": "customerId",   "type": "string"},
+    {"name": "product",      "type": "string"},
+    {"name": "quantityLtrs", "type": "double"},
+    {"name": "deliveredAt",  "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
