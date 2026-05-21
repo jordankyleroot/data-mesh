@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "FinanceInvoiceRaised",
+  "namespace": "com.kylecorp.finance",
+  "doc": "Invoice sent to customer after delivery",
+  "fields": [
+    {"name": "invoiceId",    "type": "string"},
+    {"name": "orderId",      "type": "string"},
+    {"name": "customerId",   "type": "string"},
+    {"name": "product",      "type": "string"},
+    {"name": "amountUsd",    "type": "double"},
+    {"name": "taxUsd",       "type": "double"},
+    {"name": "totalUsd",     "type": "double"},
+    {"name": "dueDate",      "type": "string"},
+    {"name": "raisedAt",     "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

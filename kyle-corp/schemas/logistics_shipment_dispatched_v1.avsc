@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "LogisticsShipmentDispatched",
+  "namespace": "com.kylecorp.logistics",
+  "doc": "A product shipment leaves the terminal",
+  "fields": [
+    {"name": "shipmentId",   "type": "string"},
+    {"name": "orderId",      "type": "string"},
+    {"name": "product",      "type": "string"},
+    {"name": "quantityLtrs", "type": "double"},
+    {"name": "vehicleId",    "type": "string"},
+    {"name": "originDepot",  "type": "string"},
+    {"name": "destination",  "type": "string"},
+    {"name": "customerId",   "type": "string"},
+    {"name": "etaHours",     "type": "double"},
+    {"name": "dispatchedAt", "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

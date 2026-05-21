@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "CrudeBarrelReceived",
+  "namespace": "com.kylecorp.crude",
+  "doc": "Fired when a tanker delivers crude oil to a terminal",
+  "fields": [
+    {"name": "batchId",       "type": "string"},
+    {"name": "tankerId",      "type": "string"},
+    {"name": "crudGrade",     "type": {"type": "enum", "name": "CrudeGrade", "symbols": ["BRENT", "WTI", "BONNY_LIGHT", "FORCADOS", "QUA_IBOE"]}},
+    {"name": "barrels",       "type": "double"},
+    {"name": "apiGravity",    "type": "double"},
+    {"name": "sulfurContent", "type": "double"},
+    {"name": "originPort",    "type": "string"},
+    {"name": "destinationTank", "type": "string"},
+    {"name": "pricePerBarrel",  "type": "double"},
+    {"name": "receivedAt",    "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

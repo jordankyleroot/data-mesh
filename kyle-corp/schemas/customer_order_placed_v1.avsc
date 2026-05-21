@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "CustomerOrderPlaced",
+  "namespace": "com.kylecorp.customer",
+  "doc": "Customer places a product order through the portal",
+  "fields": [
+    {"name": "orderId",       "type": "string"},
+    {"name": "customerId",    "type": "string"},
+    {"name": "customerName",  "type": "string"},
+    {"name": "product",       "type": {"type": "enum", "name": "CustomerProduct", "symbols": ["DIESEL", "PETROL", "LPG", "KEROSENE", "CRUDE_FEEDSTOCK"]}},
+    {"name": "quantityLtrs",  "type": "double"},
+    {"name": "deliveryAddress","type": "string"},
+    {"name": "priority",      "type": {"type": "enum", "name": "OrderPriority", "symbols": ["STANDARD", "EXPRESS", "EMERGENCY"]}},
+    {"name": "placedAt",      "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

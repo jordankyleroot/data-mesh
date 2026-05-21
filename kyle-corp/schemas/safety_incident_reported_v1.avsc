@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "SafetyIncidentReported",
+  "namespace": "com.kylecorp.safety",
+  "doc": "HSE incident: spill, fire, injury, or near-miss",
+  "fields": [
+    {"name": "incidentId",    "type": "string"},
+    {"name": "type",          "type": {"type": "enum", "name": "IncidentType", "symbols": ["SPILL", "FIRE", "INJURY", "NEAR_MISS", "EQUIPMENT_FAILURE"]}},
+    {"name": "severity",      "type": {"type": "enum", "name": "IncidentSeverity", "symbols": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]}},
+    {"name": "location",      "type": "string"},
+    {"name": "description",   "type": "string"},
+    {"name": "reportedBy",    "type": "string"},
+    {"name": "barrelsSpilled",  "type": ["null","double"], "default": null},
+    {"name": "injuredCount",    "type": ["null","int"],    "default": null},
+    {"name": "reportedAt",    "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "PipelineLeakAlert",
+  "namespace": "com.kylecorp.pipeline",
+  "doc": "Critical alert when a leak or pressure drop is detected",
+  "fields": [
+    {"name": "alertId",              "type": "string"},
+    {"name": "pipelineId",           "type": "string"},
+    {"name": "segmentKm",            "type": "double"},
+    {"name": "pressureDrop",         "type": "double"},
+    {"name": "severity",             "type": {"type": "enum", "name": "AlertSeverity", "symbols": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]}},
+    {"name": "estimatedLossBarrels", "type": "double"},
+    {"name": "detectedAt",           "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

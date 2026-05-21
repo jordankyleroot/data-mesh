@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "TradingPriceTick",
+  "namespace": "com.kylecorp.trading",
+  "doc": "Market price update for a commodity",
+  "fields": [
+    {"name": "product",   "type": "string"},
+    {"name": "bidPrice",  "type": "double"},
+    {"name": "askPrice",  "type": "double"},
+    {"name": "midPrice",  "type": "double"},
+    {"name": "change24h", "type": "double"},
+    {"name": "tickAt",    "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}

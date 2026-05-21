@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "PipelineFlowUpdated",
+  "namespace": "com.kylecorp.pipeline",
+  "doc": "Pipeline flow sensor reading every 5 minutes",
+  "fields": [
+    {"name": "pipelineId",   "type": "string"},
+    {"name": "segmentId",    "type": "string"},
+    {"name": "flowRateBph",  "type": "double", "doc": "Barrels per hour"},
+    {"name": "pressurePsi",  "type": "double"},
+    {"name": "tempCelsius",  "type": "double"},
+    {"name": "status",       "type": {"type": "enum", "name": "PipelineStatus", "symbols": ["NORMAL", "DEGRADED", "SHUTDOWN"]}},
+    {"name": "recordedAt",   "type": {"type": "long", "logicalType": "timestamp-millis"}}
+  ]
+}
